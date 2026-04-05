@@ -1,36 +1,133 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# VerifyIQ - Background Verification SaaS Platform
 
-## Getting Started
+Multi-tenant BGV (Background Verification) platform. Companies sign up, get an API key, submit people for verification via API or portal, and get results back via webhook.
 
-First, run the development server:
+## Stack
+
+- **Next.js 14** (App Router)
+- **Neon PostgreSQL** with Prisma ORM (uses `verifyiq` schema)
+- **NextAuth** for authentication
+- **Tailwind CSS** for styling
+- **Deployed on Vercel**
+
+## Setup
 
 ```bash
+# Install dependencies
+npm install
+
+# Copy environment file and fill in values
+cp .env.example .env
+
+# Push database schema (uses separate verifyiq schema, won't affect existing tables)
+npx prisma db push
+
+# Generate Prisma client
+npx prisma generate
+
+# Seed demo data
+npx tsx prisma/seed.ts
+
+# Start development server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+## Demo Login
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+After seeding:
+- **Email:** demo@acmecorp.com
+- **Password:** demo123
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+The seed script will print the API key to the console.
 
-## Learn More
+## Environment Variables
 
-To learn more about Next.js, take a look at the following resources:
+| Variable | Description |
+|----------|-------------|
+| `DATABASE_URL` | Neon PostgreSQL connection string (pooled) |
+| `DIRECT_DATABASE_URL` | Neon direct connection (for migrations) |
+| `NEXTAUTH_URL` | App URL (http://localhost:3000 for dev) |
+| `NEXTAUTH_SECRET` | NextAuth secret key |
+| `IDFY_API_KEY` | IDfy API key for PAN verification |
+| `IDFY_BASE_URL` | IDfy API base URL |
+| `SERPAPI_KEY` | SerpAPI key for internet sweep |
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+## API Usage
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+### Submit Verification
 
-## Deploy on Vercel
+```bash
+curl -X POST https://your-app.vercel.app/api/v1/verify \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: viq_your_api_key" \
+  -d '{
+    "subjectName": "John Doe",
+    "panNumber": "ABCDE1234F",
+    "linkedinUrl": "https://linkedin.com/in/johndoe",
+    "phone": "+91-9876543210",
+    "city": "Mumbai",
+    "callbackUrl": "https://your-server.com/webhook"
+  }'
+```
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+### Check Status
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+```bash
+curl https://your-app.vercel.app/api/v1/verify/{id} \
+  -H "x-api-key: viq_your_api_key"
+```
+
+### Test Webhook
+
+```bash
+curl -X POST https://your-app.vercel.app/api/v1/webhook/test \
+  -H "Content-Type: application/json" \
+  -H "x-api-key: viq_your_api_key" \
+  -d '{"webhookUrl": "https://your-server.com/webhook"}'
+```
+
+## Verification Checks
+
+Each submission runs these checks:
+
+1. **PAN Verification** - IDfy REST API validation
+2. **Internet Sweep** - SerpAPI search for fraud/complaint/arrest records
+3. **LinkedIn Check** - URL existence verification
+4. **Field Completeness** - Score based on provided fields
+
+## Risk Scoring
+
+Starts at 10, deductions:
+- -3 if PAN verification fails
+- -4 if internet sweep finds red flags
+- -2 if no LinkedIn profile
+- -1 if fields are incomplete
+
+| Score | Status |
+|-------|--------|
+| 7-10 | Clear |
+| 4-6 | Review |
+| 0-3 | Flagged |
+
+## Webhook Payload
+
+Results are POSTed to the tenant's callback URL:
+
+```json
+{
+  "verificationId": "uuid",
+  "subjectName": "John Doe",
+  "status": "clear",
+  "riskScore": 9,
+  "results": [...],
+  "completedAt": "2024-01-01T00:00:00.000Z"
+}
+```
+
+## Portal Features
+
+- **Dashboard** - Overview of all verifications with status and risk scores
+- **Submit Verification** - Single submission form
+- **Bulk Upload** - Excel/CSV upload with column mapping
+- **Settings** - API key management, webhook configuration
+- **Analytics** - Usage stats and verification breakdown
