@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { Search, ChevronDown, ChevronUp, ChevronRight, Filter } from "lucide-react";
 import { type Verification } from "@/data/mock";
-import { fetchVerifications } from "@/lib/api";
+import { fetchVerifications, reviewVerification } from "@/lib/api";
 import { Input } from "@/components/ui/input";
 
 function RiskBadge({ score, level }: { score: number; level: string }) {
@@ -37,7 +37,7 @@ function CheckStatusDot({ status }: { status: string }) {
   return <span className={`inline-block w-2 h-2 rounded-full ${colors[status as keyof typeof colors] ?? "bg-gray-400"}`} />;
 }
 
-function DetailRow({ v }: { v: Verification }) {
+function DetailRow({ v, onReview }: { v: Verification; onReview: (id: string, action: "approve" | "reject") => void }) {
   return (
     <tr>
       <td colSpan={7} className="px-6 py-0">
@@ -74,6 +74,58 @@ function DetailRow({ v }: { v: Verification }) {
               </div>
             ))}
           </div>
+
+          {(v.selfieUrl || v.aadhaarCardUrl || v.panCardUrl) && (
+            <div className="mt-4">
+              <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-3">Identity Photos</p>
+              <div className="grid grid-cols-3 gap-3">
+                {v.selfieUrl && (
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Selfie</p>
+                    <img src={v.selfieUrl} alt="Selfie" className="w-full h-32 object-cover rounded-lg border" />
+                  </div>
+                )}
+                {v.aadhaarCardUrl && (
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">Aadhaar Card</p>
+                    <img src={v.aadhaarCardUrl} alt="Aadhaar" className="w-full h-32 object-cover rounded-lg border" />
+                  </div>
+                )}
+                {v.panCardUrl && (
+                  <div>
+                    <p className="text-xs text-muted-foreground mb-1">PAN Card</p>
+                    <img src={v.panCardUrl} alt="PAN" className="w-full h-32 object-cover rounded-lg border" />
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {v.faceMatchScore !== undefined && v.faceMatchScore !== null && (
+            <div className="mt-3 flex items-center gap-2">
+              <span className="text-xs text-muted-foreground">Face Match:</span>
+              <span className={`text-sm font-semibold ${v.faceMatchScore >= 80 ? "text-green-600" : "text-red-600"}`}>
+                {v.faceMatchScore.toFixed(1)}%
+              </span>
+              <span className={`text-xs px-2 py-0.5 rounded-full ${v.faceMatchScore >= 80 ? "bg-green-50 text-green-700" : "bg-red-50 text-red-700"}`}>
+                {v.faceMatchScore >= 80 ? "Matched" : "Not Matched"}
+              </span>
+            </div>
+          )}
+
+          {(v.status === "flagged" || v.status === "in_progress") && (
+            <div className="mt-4 pt-4 border-t border-border">
+              <p className="text-xs text-muted-foreground font-medium uppercase tracking-wider mb-2">Admin Review</p>
+              <div className="flex gap-2">
+                <button onClick={() => onReview(v.id, "approve")} className="px-4 py-2 text-sm font-medium bg-green-500 text-white rounded-lg hover:bg-green-600">
+                  Approve
+                </button>
+                <button onClick={() => onReview(v.id, "reject")} className="px-4 py-2 text-sm font-medium bg-red-500 text-white rounded-lg hover:bg-red-600">
+                  Reject
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </td>
     </tr>
@@ -94,6 +146,17 @@ export function Results() {
       .catch(console.error)
       .finally(() => setLoading(false));
   }, []);
+
+  async function handleReview(id: string, action: "approve" | "reject") {
+    try {
+      await reviewVerification(id, action);
+      // Refresh verifications after review
+      const data = await fetchVerifications(100);
+      setAllVerifications(data.verifications);
+    } catch (error) {
+      console.error("Review error:", error);
+    }
+  }
 
   const filtered = allVerifications.filter((v) => {
     const matchSearch =
@@ -219,7 +282,7 @@ export function Results() {
                       {new Date(v.date).toLocaleDateString("en-IN", { day: "numeric", month: "short", year: "numeric" })}
                     </td>
                   </tr>,
-                  expandedId === v.id && <DetailRow key={`${v.id}-detail`} v={v} />,
+                  expandedId === v.id && <DetailRow key={`${v.id}-detail`} v={v} onReview={handleReview} />,
                 ]
               ))}
             </tbody>

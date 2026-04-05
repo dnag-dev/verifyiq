@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { CheckCircle2, Loader2, AlertTriangle, User, Building2, Phone, CreditCard, Fingerprint, Link2 as Linkedin, MapPin, Link as LinkIcon } from "lucide-react";
+import { CheckCircle2, Loader2, AlertTriangle, User, Building2, Phone, CreditCard, Fingerprint, Link2 as Linkedin, MapPin, Link as LinkIcon, Mail, Copy, ExternalLink } from "lucide-react";
 import {
   Form,
   FormControl,
@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { submitVerification, fetchVerificationDetail } from "@/lib/api";
+import { submitVerification, fetchVerificationDetail, sendVerificationLink } from "@/lib/api";
 
 const formSchema = z.object({
   fullName: z.string().min(2, "Full name is required"),
@@ -22,6 +22,7 @@ const formSchema = z.object({
   aadhaar: z.string().min(12, "Aadhaar number must be 12 digits"),
   linkedin: z.string().url("Must be a valid URL").or(z.string().length(0)).optional(),
   city: z.string().min(2, "City is required"),
+  candidateEmail: z.string().email("Valid email required").or(z.string().length(0)).optional(),
   callbackUrl: z.string().url("Must be a valid URL").or(z.string().length(0)).optional(),
 });
 
@@ -89,7 +90,10 @@ function RiskGauge({ score }: { score: number }) {
 }
 
 export function NewVerification() {
-  const [phase, setPhase] = useState<"form" | "progress" | "result">("form");
+  const [phase, setPhase] = useState<"form" | "link" | "progress" | "result">("form");
+  const [candidateLink, setCandidateLink] = useState<string>("");
+  const [linkEmailSent, setLinkEmailSent] = useState<boolean>(false);
+  const [candidateEmailValue, setCandidateEmailValue] = useState<string>("");
   const [steps, setSteps] = useState<Step[]>([
     { label: "Identity Check", status: "waiting" },
     { label: "Internet Sweep", status: "waiting" },
@@ -107,11 +111,29 @@ export function NewVerification() {
       aadhaar: "",
       linkedin: "",
       city: "",
+      candidateEmail: "",
       callbackUrl: "",
     },
   });
 
   async function onSubmit(values: FormValues) {
+    try {
+      const { verificationId: vId } = await submitVerification(values);
+      setVerificationId(vId);
+      setCandidateEmailValue(values.candidateEmail || "");
+
+      // Generate verification link
+      const { link, emailSent } = await sendVerificationLink(vId);
+      setCandidateLink(link);
+      setLinkEmailSent(emailSent);
+      setPhase("link");
+    } catch (error) {
+      console.error("Verification error:", error);
+      setPhase("form");
+    }
+  }
+
+  async function startPolling(vId: string) {
     setPhase("progress");
     setSteps([
       { label: "Identity Check", status: "waiting" },
@@ -120,10 +142,6 @@ export function NewVerification() {
     ]);
 
     try {
-      // Submit to API
-      const { verificationId: vId } = await submitVerification(values);
-      setVerificationId(vId);
-
       // Poll for results
       const stepMap: Record<string, number> = {
         "pan_verification": 0,
@@ -219,6 +237,7 @@ export function NewVerification() {
     { name: "aadhaar" as const, label: "Aadhaar Number", icon: Fingerprint, placeholder: "2345 6789 0123" },
     { name: "linkedin" as const, label: "LinkedIn URL", icon: Linkedin, placeholder: "https://linkedin.com/in/arjunmehta" },
     { name: "city" as const, label: "City", icon: MapPin, placeholder: "Bengaluru" },
+    { name: "candidateEmail" as const, label: "Candidate Email", icon: Mail, placeholder: "candidate@email.com" },
     { name: "callbackUrl" as const, label: "Callback URL", icon: LinkIcon, placeholder: "https://yourdomain.com/webhook" },
   ];
 
@@ -277,6 +296,64 @@ export function NewVerification() {
               </div>
             </form>
           </Form>
+        </div>
+      )}
+
+      {phase === "link" && (
+        <div className="bg-card rounded-xl border border-card-border shadow-sm p-8">
+          <div className="text-center mb-6">
+            <div className="w-16 h-16 mx-auto rounded-full flex items-center justify-center mb-4" style={{ background: "linear-gradient(135deg, #667eea20, #f07b6c20)" }}>
+              <CheckCircle2 className="w-8 h-8 text-green-500" />
+            </div>
+            <h2 className="font-semibold text-lg text-foreground">Verification Created</h2>
+            <p className="text-sm text-muted-foreground mt-1">Share this link with the candidate to complete their identity verification</p>
+          </div>
+
+          <div className="space-y-4 max-w-lg mx-auto">
+            <div>
+              <label className="text-sm font-medium text-foreground mb-1.5 block">Candidate Verification Link</label>
+              <div className="flex gap-2">
+                <Input
+                  value={candidateLink}
+                  readOnly
+                  className="flex-1 font-mono text-sm"
+                />
+                <Button
+                  variant="outline"
+                  size="icon"
+                  onClick={() => { navigator.clipboard.writeText(candidateLink); }}
+                  title="Copy Link"
+                >
+                  <Copy className="w-4 h-4" />
+                </Button>
+              </div>
+            </div>
+
+            {linkEmailSent && candidateEmailValue && (
+              <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg">
+                <Mail className="w-4 h-4 text-green-600" />
+                <p className="text-sm text-green-700">Email sent to {candidateEmailValue}</p>
+              </div>
+            )}
+
+            <div className="flex gap-3 pt-2">
+              <Button
+                onClick={() => { if (verificationId) startPolling(verificationId); }}
+                className="flex-1 h-11 font-semibold text-sm"
+                style={{ background: "linear-gradient(135deg, #667eea 0%, #f07b6c 100%)", border: "none" }}
+              >
+                <ExternalLink className="w-4 h-4 mr-2" />
+                Track Progress
+              </Button>
+              <Button
+                variant="outline"
+                className="flex-1 h-11 font-semibold text-sm"
+                onClick={() => { window.location.href = "/dashboard"; }}
+              >
+                Back to Dashboard
+              </Button>
+            </div>
+          </div>
         </div>
       )}
 

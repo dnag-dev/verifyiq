@@ -94,12 +94,35 @@ model Verification {
   linkedinUrl   String?   @map("linkedin_url")
   phone         String?
   city          String?
+  candidateEmail String?  @map("candidate_email")
   status        String    @default("pending")
   riskScore     Int?      @map("risk_score")
   results       Json?
   callbackUrl   String?   @map("callback_url")
   createdAt     DateTime  @default(now()) @map("created_at")
   completedAt   DateTime? @map("completed_at")
+
+  // Candidate verification token (magic link)
+  verifyToken    String?   @unique @map("verify_token")
+  tokenExpiresAt DateTime? @map("token_expires_at")
+
+  // Image URLs (Vercel Blob)
+  selfieUrl      String?  @map("selfie_url")
+  aadhaarCardUrl String?  @map("aadhaar_card_url")
+  panCardUrl     String?  @map("pan_card_url")
+
+  // OCR extracted values
+  ocrPanNumber     String? @map("ocr_pan_number")
+  ocrAadhaarNumber String? @map("ocr_aadhaar_number")
+
+  // Face match
+  faceMatchScore  Float?  @map("face_match_score")
+  faceMatchStatus String? @map("face_match_status")
+
+  // Admin review
+  reviewedBy   String?   @map("reviewed_by")
+  reviewedAt   DateTime? @map("reviewed_at")
+  reviewNotes  String?   @map("review_notes")
 
   tenant Tenant              @relation(fields: [tenantId], references: [id], onDelete: Cascade)
   checks VerificationCheck[]

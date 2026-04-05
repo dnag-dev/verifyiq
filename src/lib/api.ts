@@ -100,6 +100,11 @@ export function mapBackendVerification(v: any): Verification {
     linkedin: v.linkedinUrl || "",
     city: v.city || "",
     checks,
+    selfieUrl: v.selfieUrl || undefined,
+    aadhaarCardUrl: v.aadhaarCardUrl || undefined,
+    panCardUrl: v.panCardUrl || undefined,
+    faceMatchScore: v.faceMatchScore ?? undefined,
+    faceMatchStatus: v.faceMatchStatus || undefined,
   };
 }
 
@@ -159,6 +164,7 @@ export async function submitVerification(formData: {
   aadhaar: string;
   linkedin?: string;
   city: string;
+  candidateEmail?: string;
   callbackUrl?: string;
 }): Promise<{ verificationId: string }> {
   const res = await fetch("/api/verifications", {
@@ -171,6 +177,7 @@ export async function submitVerification(formData: {
       linkedinUrl: formData.linkedin || undefined,
       phone: formData.phone,
       city: formData.city,
+      candidateEmail: formData.candidateEmail || undefined,
     }),
   });
   if (!res.ok) throw new Error("Failed to submit verification");
@@ -214,6 +221,25 @@ export async function testWebhook(apiKey: string, webhookUrl: string) {
     body: JSON.stringify({ webhookUrl }),
   });
   return res.json();
+}
+
+export async function sendVerificationLink(verificationId: string): Promise<{ link: string; emailSent: boolean }> {
+  const res = await fetch("/api/send-verification-link", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ verificationId }),
+  });
+  if (!res.ok) throw new Error("Failed to send verification link");
+  return res.json();
+}
+
+export async function reviewVerification(id: string, action: "approve" | "reject"): Promise<void> {
+  const res = await fetch(`/api/verifications/${id}/review`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ action }),
+  });
+  if (!res.ok) throw new Error("Failed to review verification");
 }
 
 export async function submitBulkUpload(records: any[], columnMapping: Record<string, string>) {

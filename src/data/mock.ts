@@ -21,6 +21,11 @@ export interface Verification {
   linkedin: string;
   city: string;
   checks: CheckResult[];
+  selfieUrl?: string;
+  aadhaarCardUrl?: string;
+  panCardUrl?: string;
+  faceMatchScore?: number;
+  faceMatchStatus?: string;
 }
 
 export interface CheckResult {
